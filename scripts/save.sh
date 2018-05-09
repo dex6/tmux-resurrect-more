@@ -266,6 +266,9 @@ dump_pane_contents() {
 	local pane_contents_area="$(get_tmux_option "$pane_contents_area_option" "$default_pane_contents_area")"
 	dump_panes_raw |
 		while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
+			if is_session_grouped "$session_name" || is_window_linked "$session_name" "$window_number"; then
+				continue
+			fi
 			capture_pane_contents "${session_name}:${window_number}.${pane_index}" "$history_size" "$pane_contents_area"
 		done
 }
