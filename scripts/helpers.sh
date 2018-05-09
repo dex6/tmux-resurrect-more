@@ -78,6 +78,17 @@ is_session_grouped() {
 	[[ "$GROUPED_SESSIONS" == *"${d}${session_name}${d}"* ]]
 }
 
+get_linked_windows() {
+	local linked_windows_dump="$1"
+	export LINKED_WINDOWS="${d}$(echo "$linked_windows_dump" | cut -f2-3 -d"$d" | tr "$d\\n" ":$d")"
+}
+
+is_window_linked() {
+	local session_name="$1"
+	local window_index="$2"
+	[[ "$LINKED_WINDOWS" = *"${d}${session_name}:${window_index}${d}"* ]]
+}
+
 # pane content file helpers
 
 pane_contents_create_archive() {

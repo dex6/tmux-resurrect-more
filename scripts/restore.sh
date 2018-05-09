@@ -284,6 +284,13 @@ handle_session_0() {
 	fi
 }
 
+restore_linked_windows() {
+	\grep '^linked_window' $(last_resurrect_file) |
+		while IFS=$d read line_type session window_index original_session original_window_index; do
+			tmux link-window -s "${original_session}:${original_window_index}" -t "${session}:${window_index}"
+		done
+}
+
 restore_window_properties() {
 	local window_name
 	\grep '^window' $(last_resurrect_file) |
@@ -369,6 +376,7 @@ main() {
 		execute_hook "pre-restore-all"
 		restore_all_panes
 		handle_session_0
+		restore_linked_windows
 		restore_window_properties >/dev/null 2>&1
 		execute_hook "pre-restore-pane-processes"
 		restore_all_pane_processes
