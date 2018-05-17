@@ -258,6 +258,16 @@ dump_windows() {
 		done
 }
 
+dump_session_options() {
+	tmux list-sessions -F "#{session_name}" |
+		while read session_name; do
+			tmux show-options -t "${session_name}:" |
+				while read option value; do
+					echo "option_session${d}${session_name}${d}${option}${d}${value}"
+				done
+		done
+}
+
 dump_state() {
 	tmux display-message -p "$(state_format)"
 }
@@ -291,6 +301,7 @@ save_all() {
 	dump_panes   >> "$resurrect_file_path"
 	dump_windows >> "$resurrect_file_path"
 	dump_state   >> "$resurrect_file_path"
+	dump_session_options  >> "$resurrect_file_path"
 	execute_hook "post-save-layout" "$resurrect_file_path"
 	if files_differ "$resurrect_file_path" "$last_resurrect_file"; then
 		ln -fs "$(basename "$resurrect_file_path")" "$last_resurrect_file"

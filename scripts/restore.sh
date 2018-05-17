@@ -362,6 +362,14 @@ restore_active_and_alternate_sessions() {
 	done < $(last_resurrect_file)
 }
 
+restore_session_options() {
+	\grep '^option_session' $(last_resurrect_file) |
+		while IFS=$d read line_type session_name option value; do
+			value=$(echo $value | sed 's/"\(.*\)"/\1/')
+			tmux set-option -t "${session_name}:" "${option}" "${value}"
+		done
+}
+
 # A cleanup that happens after 'restore_all_panes' seems to fix fish shell
 # users' restore problems.
 cleanup_restored_pane_contents() {
@@ -386,6 +394,7 @@ main() {
 		restore_grouped_sessions  # also restores active and alt windows for grouped sessions
 		restore_active_and_alternate_windows
 		restore_active_and_alternate_sessions
+		restore_session_options
 		cleanup_restored_pane_contents
 		execute_hook "post-restore-all"
 		stop_spinner
