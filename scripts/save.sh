@@ -93,6 +93,16 @@ state_format() {
 	echo "$format"
 }
 
+window_option_format() {
+	local format
+	format+="option_window"
+	format+="${delimiter}"
+	format+="#{session_name}"
+	format+="${delimiter}"
+	format+="#{window_index}"
+	echo "$format"
+}
+
 dump_panes_raw() {
 	tmux list-panes -a -F "$(pane_format)"
 }
@@ -268,6 +278,19 @@ dump_session_options() {
 		done
 }
 
+dump_window_options() {
+	tmux list-windows -a -F "$(window_option_format)" |
+		while IFS=$d read line_type session_name window_index; do
+			if is_session_grouped "${session_name}" || is_window_linked "$session_name" "$window_index"; then
+				continue
+			fi
+			tmux show-window-options -t "${session_name}:${window_index}" | sed "s/ /$d/" |
+				while IFS=$d read option value; do
+					echo "${line_type}${d}${session_name}${d}${window_index}${d}${option}$d${value}"
+				done
+		done
+}
+
 dump_state() {
 	tmux display-message -p "$(state_format)"
 }
@@ -302,6 +325,7 @@ save_all() {
 	dump_windows >> "$resurrect_file_path"
 	dump_state   >> "$resurrect_file_path"
 	dump_session_options  >> "$resurrect_file_path"
+	dump_window_options   >> "$resurrect_file_path"
 	execute_hook "post-save-layout" "$resurrect_file_path"
 	if files_differ "$resurrect_file_path" "$last_resurrect_file"; then
 		ln -fs "$(basename "$resurrect_file_path")" "$last_resurrect_file"

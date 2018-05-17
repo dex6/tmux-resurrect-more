@@ -370,6 +370,31 @@ restore_session_options() {
 		done
 }
 
+restore_window_options() {
+	local has_automatic_rename="${d}"
+	while IFS=$d read line_type session_name window_index option value; do
+		value=$(echo $value | sed 's/"\(.*\)"/\1/')
+		if [ "$option" == "automatic-rename" ]; then
+			has_automatic_rename+="${session_name}:${window_index}${d}"
+		fi
+		tmux set-window-option -t "${session_name}:${window_index}" "${option}" "${value}"
+	done <<< $(\grep '^option_window' $(last_resurrect_file))
+
+	get_grouped_sessions "$(\grep '^grouped_session\s' $(last_resurrect_file))"
+	get_linked_windows "$(\grep '^linked_window\s' $(last_resurrect_file))"
+
+	tmux list-windows -a -F "#{session_name}${d}#{window_index}" |
+		while IFS=$d read session_name window_index ;do
+			if is_session_grouped "$session_name" || is_window_linked "$session_name" "$window_index"; then
+				continue
+			fi
+
+			if [[ "$has_automatic_rename" != *"$session_name:$window_index"* ]]; then
+				tmux set-window-option -u -t "$session_name:$window_index" "automatic-rename"
+			fi
+		done
+}
+
 # A cleanup that happens after 'restore_all_panes' seems to fix fish shell
 # users' restore problems.
 cleanup_restored_pane_contents() {
@@ -395,6 +420,7 @@ main() {
 		restore_active_and_alternate_windows
 		restore_active_and_alternate_sessions
 		restore_session_options
+		restore_window_options
 		cleanup_restored_pane_contents
 		execute_hook "post-restore-all"
 		stop_spinner
