@@ -25,6 +25,18 @@ grouped_sessions_format() {
 	echo "$format"
 }
 
+linked_windows_format() {
+	local format
+	format+="#{window_linked}"
+	format+="${delimiter}"
+	format+="#{window_id}"
+	format+="${delimiter}"
+	format+="#{session_name}"
+	format+="${delimiter}"
+	format+="#{window_index}"
+	echo "$format"
+}
+
 pane_format() {
 	local format
 	format+="pane"
@@ -78,6 +90,16 @@ state_format() {
 	format+="#{client_session}"
 	format+="${delimiter}"
 	format+="#{client_last_session}"
+	echo "$format"
+}
+
+window_option_format() {
+	local format
+	format+="option_window"
+	format+="${delimiter}"
+	format+="#{session_name}"
+	format+="${delimiter}"
+	format+="#{window_index}"
 	echo "$format"
 }
 
@@ -185,13 +207,45 @@ fetch_and_dump_grouped_sessions(){
 	fi
 }
 
+dump_linked_windows() {
+	local current_window_id=""
+	local original_session
+	local original_window_index
+	tmux list-windows -a -F "$(linked_windows_format)" |
+		grep "^1" |
+		cut -c 3- |
+		sort |
+		while IFS=$d read window_id session_name window_index; do
+			if is_session_grouped "$session_name"; then
+				continue
+			fi
+			if [ "$window_id" != "$current_window_id" ]; then
+				# this window is the original/first of linked windows
+				original_session="$session_name"
+				original_window_index="$window_index"
+				current_window_id="$window_id"
+			else
+				# this window is linked to the original window
+				echo "linked_window${d}${session_name}${d}${window_index}${d}${original_session}${d}${original_window_index}"
+			fi
+		done
+}
+
+fetch_and_dump_linked_windows() {
+	local linked_windows_dump="$(dump_linked_windows)"
+	get_linked_windows "$linked_windows_dump"
+	if [ -n "$linked_windows_dump" ]; then
+		echo "$linked_windows_dump"
+	fi
+}
+
 # translates pane pid to process command running inside a pane
 dump_panes() {
 	local full_command
 	dump_panes_raw |
 		while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
 			# not saving panes from grouped sessions
-			if is_session_grouped "$session_name"; then
+			if is_session_grouped "$session_name" || is_window_linked "$session_name" "$window_number"; then
 				continue
 			fi
 			full_command="$(pane_full_command $pane_pid)"
@@ -214,6 +268,29 @@ dump_windows() {
 		done
 }
 
+dump_session_options() {
+	tmux list-sessions -F "#{session_name}" |
+		while read session_name; do
+			tmux show-options -t "${session_name}:" |
+				while read option value; do
+					echo "option_session${d}${session_name}${d}${option}${d}${value}"
+				done
+		done
+}
+
+dump_window_options() {
+	tmux list-windows -a -F "$(window_option_format)" |
+		while IFS=$d read line_type session_name window_index; do
+			if is_session_grouped "${session_name}" || is_window_linked "$session_name" "$window_index"; then
+				continue
+			fi
+			tmux show-window-options -t "${session_name}:${window_index}" | sed "s/ /$d/" |
+				while IFS=$d read option value; do
+					echo "${line_type}${d}${session_name}${d}${window_index}${d}${option}$d${value}"
+				done
+		done
+}
+
 dump_state() {
 	tmux display-message -p "$(state_format)"
 }
@@ -222,6 +299,9 @@ dump_pane_contents() {
 	local pane_contents_area="$(get_tmux_option "$pane_contents_area_option" "$default_pane_contents_area")"
 	dump_panes_raw |
 		while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
+			if is_session_grouped "$session_name" || is_window_linked "$session_name" "$window_number"; then
+				continue
+			fi
 			capture_pane_contents "${session_name}:${window_number}.${pane_index}" "$history_size" "$pane_contents_area"
 		done
 }
@@ -240,9 +320,12 @@ save_all() {
 	local last_resurrect_file="$(last_resurrect_file)"
 	mkdir -p "$(resurrect_dir)"
 	fetch_and_dump_grouped_sessions > "$resurrect_file_path"
+	fetch_and_dump_linked_windows >> "$resurrect_file_path"
 	dump_panes   >> "$resurrect_file_path"
 	dump_windows >> "$resurrect_file_path"
 	dump_state   >> "$resurrect_file_path"
+	dump_session_options  >> "$resurrect_file_path"
+	dump_window_options   >> "$resurrect_file_path"
 	execute_hook "post-save-layout" "$resurrect_file_path"
 	if files_differ "$resurrect_file_path" "$last_resurrect_file"; then
 		ln -fs "$(basename "$resurrect_file_path")" "$last_resurrect_file"
