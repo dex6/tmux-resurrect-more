@@ -39,6 +39,8 @@ linked_windows_format() {
 
 pane_format() {
 	local format
+	format+="#{session_id}"
+	format+="${delimiter}"
 	format+="pane"
 	format+="${delimiter}"
 	format+="#{session_name}"
@@ -67,6 +69,8 @@ pane_format() {
 
 window_format() {
 	local format
+	format+="#{session_id}"
+	format+="${delimiter}"
 	format+="window"
 	format+="${delimiter}"
 	format+="#{session_name}"
@@ -116,11 +120,11 @@ pane_option_format() {
 }
 
 dump_panes_raw() {
-	tmux list-panes -a -F "$(pane_format)"
+	tmux list-panes -a -F "$(pane_format)" | sort -k1 | cut -f2-
 }
 
 dump_windows_raw(){
-	tmux list-windows -a -F "$(window_format)"
+	tmux list-windows -a -F "$(window_format)" | sort -k1 | cut -f2-
 }
 
 toggle_window_zoom() {
