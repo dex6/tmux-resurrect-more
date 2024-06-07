@@ -30,7 +30,7 @@ is_line_type() {
 check_saved_session_exists() {
 	local resurrect_file="$(last_resurrect_file)"
 	if [ ! -f $resurrect_file ]; then
-		display_message "Tmux resurrect file not found!"
+		display_message "Tmux resurrect file ($resurrect_file) not found!"
 		return 1
 	fi
 }
@@ -123,18 +123,23 @@ pane_creation_command() {
 	echo "cat '$(pane_contents_file "restore" "${1}:${2}.${3}")'; exec $(tmux_default_command)"
 }
 
+pane_bash_histfile() {
+	awk 'BEGIN { FS="\t"; OFS="\t" } '"/^option_pane${d}${1}${d}${2}${d}${3}${d}@_resurrect_pane_bash_histfile${d}/ { print \$NF; }" "$(last_resurrect_file)"
+}
+
 new_window() {
 	local session_name="$1"
 	local window_number="$2"
 	local dir="$3"
 	local pane_index="$4"
 	local pane_id="${session_name}:${window_number}.${pane_index}"
+	local histfile="$(pane_bash_histfile "$session_name" "$window_number" "$pane_index")"
 	dir="${dir/#\~/$HOME}"
 	if is_restoring_pane_contents && pane_contents_file_exists "$pane_id"; then
 		local pane_creation_command="$(pane_creation_command "$session_name" "$window_number" "$pane_index")"
-		tmux new-window -d -t "${session_name}:${window_number}" -c "$dir" "$pane_creation_command"
+		tmux new-window -d -t "${session_name}:${window_number}" -e "TMUX_RESURRECT_BASH_HISTFILE=$histfile" -c "$dir" "$pane_creation_command"
 	else
-		tmux new-window -d -t "${session_name}:${window_number}" -c "$dir"
+		tmux new-window -d -t "${session_name}:${window_number}" -e "TMUX_RESURRECT_BASH_HISTFILE=$histfile" -c "$dir"
 	fi
 }
 
@@ -144,11 +149,12 @@ new_session() {
 	local dir="$3"
 	local pane_index="$4"
 	local pane_id="${session_name}:${window_number}.${pane_index}"
+	local histfile="$(pane_bash_histfile "$session_name" "$window_number" "$pane_index")"
 	if is_restoring_pane_contents && pane_contents_file_exists "$pane_id"; then
 		local pane_creation_command="$(pane_creation_command "$session_name" "$window_number" "$pane_index")"
-		TMUX="" tmux -S "$(tmux_socket)" new-session -d -s "$session_name" -c "$dir" "$pane_creation_command"
+		TMUX="" tmux -S "$(tmux_socket)" new-session -d -s "$session_name" -e "TMUX_RESURRECT_BASH_HISTFILE=$histfile" -c "$dir" "$pane_creation_command"
 	else
-		TMUX="" tmux -S "$(tmux_socket)" new-session -d -s "$session_name" -c "$dir"
+		TMUX="" tmux -S "$(tmux_socket)" new-session -d -s "$session_name" -e "TMUX_RESURRECT_BASH_HISTFILE=$histfile" -c "$dir"
 	fi
 	# change first window number if necessary
 	local created_window_num="$(first_window_num)"
@@ -163,11 +169,12 @@ new_pane() {
 	local dir="$3"
 	local pane_index="$4"
 	local pane_id="${session_name}:${window_number}.${pane_index}"
+	local histfile="$(pane_bash_histfile "$session_name" "$window_number" "$pane_index")"
 	if is_restoring_pane_contents && pane_contents_file_exists "$pane_id"; then
 		local pane_creation_command="$(pane_creation_command "$session_name" "$window_number" "$pane_index")"
-		tmux split-window -t "${session_name}:${window_number}" -c "$dir" "$pane_creation_command"
+		tmux split-window -t "${session_name}:${window_number}" -e "TMUX_RESURRECT_BASH_HISTFILE=$histfile" -c "$dir" "$pane_creation_command"
 	else
-		tmux split-window -t "${session_name}:${window_number}" -c "$dir"
+		tmux split-window -t "${session_name}:${window_number}" -e "TMUX_RESURRECT_BASH_HISTFILE=$histfile" -c "$dir"
 	fi
 	# minimize window so more panes can fit
 	tmux resize-pane -t "${session_name}:${window_number}" -U "999"
@@ -399,7 +406,8 @@ restore_pane_options() {
 	\grep '^option_pane' $(last_resurrect_file) |
 		while IFS=$d read line_type session_name windows_index pane_index option value; do
 			value=$(echo $value | sed 's/"\(.*\)"/\1/')
-			tmux set-option -p -t "${session_name}:${windows_index}.${pane_index}" "${option}" "${value}"
+			# -o: don't set options that are already set (eg. by __trm_init_histfile() in bashrc)
+			tmux set-option -p -o -q -t "${session_name}:${windows_index}.${pane_index}" "${option}" "${value}"
 		done
 }
 
