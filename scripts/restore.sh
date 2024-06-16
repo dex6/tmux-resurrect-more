@@ -372,19 +372,19 @@ restore_active_and_alternate_sessions() {
 restore_session_options() {
 	\grep '^option_session' $(last_resurrect_file) |
 		while IFS=$d read line_type session_name option value; do
-			value=$(echo $value | sed 's/"\(.*\)"/\1/')
-			tmux set-option -t "${session_name}:" "${option}" "${value}"
+			value=$(echo $value | sed -r "s/(['"'"])(.*)\1/\2/')
+			[ -n "$option" ] && tmux set-option -t "${session_name}:" "${option}" "${value}"
 		done
 }
 
 restore_window_options() {
 	local has_automatic_rename="${d}"
 	while IFS=$d read line_type session_name window_index option value; do
-		value=$(echo $value | sed 's/"\(.*\)"/\1/')
+		value=$(echo $value | sed -r "s/(['"'"])(.*)\1/\2/')
 		if [ "$option" == "automatic-rename" ]; then
 			has_automatic_rename+="${session_name}:${window_index}${d}"
 		fi
-		tmux set-window-option -t "${session_name}:${window_index}" "${option}" "${value}"
+		[ -n "$option" ] && tmux set-window-option -t "${session_name}:${window_index}" "${option}" "${value}"
 	done <<< $(\grep '^option_window' $(last_resurrect_file))
 
 	get_grouped_sessions "$(\grep '^grouped_session\s' $(last_resurrect_file))"
@@ -405,9 +405,9 @@ restore_window_options() {
 restore_pane_options() {
 	\grep '^option_pane' $(last_resurrect_file) |
 		while IFS=$d read line_type session_name windows_index pane_index option value; do
-			value=$(echo $value | sed 's/"\(.*\)"/\1/')
+			value=$(echo $value | sed -r "s/(['"'"])(.*)\1/\2/')
 			# -o: don't set options that are already set (eg. by __trm_init_histfile() in bashrc)
-			tmux set-option -p -o -q -t "${session_name}:${windows_index}.${pane_index}" "${option}" "${value}"
+			[ -n "$option" ] && tmux set-option -p -o -q -t "${session_name}:${windows_index}.${pane_index}" "${option}" "${value}"
 		done
 }
 
