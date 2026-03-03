@@ -49,6 +49,7 @@ __trm_init_histfile() {
 	# have best of both worlds - not loosing history, and having per shell unique in-RAM history
 	else
 		__TRM_RELOAD_HIST=0
+		mkdir -p "$HISTDIR"
 		hist="$HISTDIR/bash_history"
 		[ -s ~/.bash_history ] && history -r ~/.bash_history
 	fi
